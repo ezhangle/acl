@@ -971,7 +971,10 @@ static int safe_main_impl(int argc, char* argv[])
 		settings.error_metric = create_additive_error_metric(allocator, clip->get_additive_format());
 
 		if (settings.error_metric == nullptr)
-			settings.error_metric = allocate_type<TransformErrorMetric>(allocator);
+		{
+			//settings.error_metric = allocate_type<TransformErrorMetric>(allocator);
+			settings.error_metric = allocate_type<TransformMatrixErrorMetric>(allocator);
+		}
 	}
 
 	// Compress & Decompress

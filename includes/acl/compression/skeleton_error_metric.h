@@ -126,8 +126,31 @@ namespace acl
 			for (; chain_bone_it != chain_bone_end; ++chain_bone_it)
 			{
 				const uint16_t chain_bone_index = *chain_bone_it;
+#if 1
 				raw_obj_mtx = matrix_mul(matrix_from_transform(raw_local_pose[chain_bone_index]), raw_obj_mtx);
 				lossy_obj_mtx = matrix_mul(matrix_from_transform(lossy_local_pose[chain_bone_index]), lossy_obj_mtx);
+#elif 0
+				AffineMatrix_32 raw_local_mtx = matrix_from_transform(raw_local_pose[chain_bone_index]);
+				raw_obj_mtx = matrix_mul(raw_local_mtx, raw_obj_mtx);
+				AffineMatrix_32 lossy_local_mtx = matrix_from_transform(lossy_local_pose[chain_bone_index]);
+				lossy_obj_mtx = matrix_mul(lossy_local_mtx, lossy_obj_mtx);
+#elif 0
+				// *
+				AffineMatrix_32 raw_local_mtx = matrix_from_transform(raw_local_pose[chain_bone_index]);
+				matrix_mul2(raw_local_mtx, raw_obj_mtx, raw_obj_mtx);
+
+				AffineMatrix_32 lossy_local_mtx = matrix_from_transform(lossy_local_pose[chain_bone_index]);
+				matrix_mul2(lossy_local_mtx, lossy_obj_mtx, lossy_obj_mtx);
+#else
+				// +
+				AffineMatrix_32 raw_local_mtx;
+				matrix_from_transform2(raw_local_pose[chain_bone_index], raw_local_mtx);
+				matrix_mul2(raw_local_mtx, raw_obj_mtx, raw_obj_mtx);
+
+				AffineMatrix_32 lossy_local_mtx;
+				matrix_from_transform2(lossy_local_pose[chain_bone_index], lossy_local_mtx);
+				matrix_mul2(lossy_local_mtx, lossy_obj_mtx, lossy_obj_mtx);
+#endif
 			}
 
 			const RigidBone& target_bone = skeleton.get_bone(bone_index);
@@ -258,6 +281,8 @@ namespace acl
 				const uint16_t chain_bone_index = *chain_bone_it;
 				raw_obj_transform = transform_mul(raw_local_pose[chain_bone_index], raw_obj_transform);
 				lossy_obj_transform = transform_mul(lossy_local_pose[chain_bone_index], lossy_obj_transform);
+				//raw_obj_transform = transform_mul3(raw_local_pose[chain_bone_index], raw_obj_transform, raw_obj_transform);
+				//lossy_obj_transform = transform_mul3(lossy_local_pose[chain_bone_index], lossy_obj_transform, lossy_obj_transform);
 			}
 
 			const RigidBone& target_bone = skeleton.get_bone(bone_index);

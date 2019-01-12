@@ -32,6 +32,8 @@
 
 ACL_IMPL_FILE_PRAGMA_PUSH
 
+#define ACL_MATRIX_MUL_VER 0
+
 namespace acl
 {
 	//////////////////////////////////////////////////////////////////////////
@@ -77,6 +79,30 @@ namespace acl
 		Vector4_32 z_axis = vector_mul(vector_set(xz + wy, yz - wx, 1.0f - (xx + yy), 0.0f), vector_get_z(scale));
 		Vector4_32 w_axis = vector_set(vector_get_x(translation), vector_get_y(translation), vector_get_z(translation), 1.0f);
 		return matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+
+	inline void ACL_SIMD_CALL matrix_set2(Quat_32Arg0 quat, Vector4_32Arg1 translation, Vector4_32Arg2 scale, AffineMatrix_32& output)
+	{
+		ACL_ASSERT(quat_is_normalized(quat), "Quaternion is not normalized");
+
+		const float x2 = quat_get_x(quat) + quat_get_x(quat);
+		const float y2 = quat_get_y(quat) + quat_get_y(quat);
+		const float z2 = quat_get_z(quat) + quat_get_z(quat);
+		const float xx = quat_get_x(quat) * x2;
+		const float xy = quat_get_x(quat) * y2;
+		const float xz = quat_get_x(quat) * z2;
+		const float yy = quat_get_y(quat) * y2;
+		const float yz = quat_get_y(quat) * z2;
+		const float zz = quat_get_z(quat) * z2;
+		const float wx = quat_get_w(quat) * x2;
+		const float wy = quat_get_w(quat) * y2;
+		const float wz = quat_get_w(quat) * z2;
+
+		Vector4_32 x_axis = vector_mul(vector_set(1.0f - (yy + zz), xy + wz, xz - wy, 0.0f), vector_get_x(scale));
+		Vector4_32 y_axis = vector_mul(vector_set(xy - wz, 1.0f - (xx + zz), yz + wx, 0.0f), vector_get_y(scale));
+		Vector4_32 z_axis = vector_mul(vector_set(xz + wy, yz - wx, 1.0f - (xx + yy), 0.0f), vector_get_z(scale));
+		Vector4_32 w_axis = vector_set(vector_get_x(translation), vector_get_y(translation), vector_get_z(translation), 1.0f);
+		output = matrix_set(x_axis, y_axis, z_axis, w_axis);
 	}
 
 	inline AffineMatrix_32 ACL_SIMD_CALL matrix_identity_32()
@@ -127,6 +153,18 @@ namespace acl
 	inline AffineMatrix_32 ACL_SIMD_CALL matrix_from_transform(Transform_32Arg0 transform)
 	{
 		return matrix_set(transform.rotation, transform.translation, transform.scale);
+	}
+
+	inline void ACL_SIMD_CALL matrix_from_transform2(Transform_32Arg0 transform, AffineMatrix_32& output)
+	{
+		matrix_set2(transform.rotation, transform.translation, transform.scale, output);
+	}
+
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_from_transform3(Transform_32Arg0 transform)
+	{
+		AffineMatrix_32 output;
+		matrix_set2(transform.rotation, transform.translation, transform.scale, output);
+		return output;
 	}
 
 	inline const Vector4_32& matrix_get_axis(const AffineMatrix_32& input, MatrixAxis axis)
@@ -213,8 +251,143 @@ namespace acl
 		}
 	}
 
+#if ACL_MATRIX_MUL_VER == 0
 	// Multiplication order is as follow: local_to_world = matrix_mul(local_to_object, object_to_world)
+	// v0
 	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul(AffineMatrix_32Arg0 lhs, AffineMatrix_32ArgN rhs)
+	{
+		Vector4_32 tmp = vector_mul(vector_mix_xxxx(lhs.x_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.x_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.x_axis), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.y_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.y_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.y_axis), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.z_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.z_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.z_axis), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.w_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.w_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.w_axis), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		return AffineMatrix_32{ x_axis , y_axis, z_axis, w_axis };
+	}
+
+	inline void ACL_SIMD_CALL matrix_mul2(AffineMatrix_32Arg0 lhs, AffineMatrix_32ArgN rhs, AffineMatrix_32& output)
+	{
+		Vector4_32 tmp = vector_mul(vector_mix_xxxx(lhs.x_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.x_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.x_axis), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.y_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.y_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.y_axis), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.z_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.z_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.z_axis), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.w_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.w_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.w_axis), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		output = matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul3(AffineMatrix_32Arg0 lhs, AffineMatrix_32ArgN rhs)
+	{
+		AffineMatrix_32 output;
+		matrix_mul2(lhs, rhs, output);
+		return output;
+	}
+#elif ACL_MATRIX_MUL_VER == 1
+	// v1
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul(AffineMatrix_32ArgN lhs, AffineMatrix_32Arg0 rhs)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		return matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+
+	inline void ACL_SIMD_CALL matrix_mul2(AffineMatrix_32ArgN lhs, AffineMatrix_32Arg0 rhs, AffineMatrix_32& output)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		output = matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+#elif ACL_MATRIX_MUL_VER == 2
+	// v2
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul(AffineMatrix_32ArgN lhs, AffineMatrix_32Arg0 rhs)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_load_ps1(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_load_ps1(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_load_ps1(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_load_ps1(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_load_ps1(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_load_ps1(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_load_ps1(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_load_ps1(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_load_ps1(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_load_ps1(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_load_ps1(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_load_ps1(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		return matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+#elif ACL_MATRIX_MUL_VER == 3
+	// v3
+	inline AffineMatrix_32 matrix_mul(const AffineMatrix_32& lhs, const AffineMatrix_32& rhs)
 	{
 		Vector4_32 tmp = vector_mul(vector_mix_xxxx(lhs.x_axis), rhs.x_axis);
 		tmp = vector_mul_add(vector_mix_yyyy(lhs.x_axis), rhs.y_axis, tmp);
@@ -237,6 +410,241 @@ namespace acl
 		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
 		return matrix_set(x_axis, y_axis, z_axis, w_axis);
 	}
+#elif ACL_MATRIX_MUL_VER == 4
+	// v4
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul_impl(const AffineMatrix_32& lhs, Vector4_32Arg0 rhs_x_axis, Vector4_32Arg0 rhs_y_axis, Vector4_32Arg0 rhs_z_axis, Vector4_32Arg0 rhs_w_axis)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs_x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs_y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs_z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs_x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs_y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs_z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs_x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs_y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs_z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs_x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs_y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs_z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs_w_axis, tmp);
+		return matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul(const AffineMatrix_32& lhs, AffineMatrix_32Arg0 rhs)
+	{
+		return matrix_mul_impl(lhs, rhs.x_axis, rhs.y_axis, rhs.z_axis, rhs.w_axis);
+	}
+#elif ACL_MATRIX_MUL_VER == 5
+	// v5
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul(AffineMatrix_32Arg0 lhs, AffineMatrix_32Arg0 rhs)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		return matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+
+	inline void ACL_SIMD_CALL matrix_mul2(AffineMatrix_32Arg0 lhs, AffineMatrix_32Arg0 rhs, AffineMatrix_32& output)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		output = matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+#elif ACL_MATRIX_MUL_VER == 6
+	// v6
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul(AffineMatrix_32Arg0 lhs, AffineMatrix_32ArgN rhs)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		return matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+
+	inline void ACL_SIMD_CALL matrix_mul2(AffineMatrix_32Arg0 lhs, AffineMatrix_32ArgN rhs, AffineMatrix_32& output)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		output = matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+#elif ACL_MATRIX_MUL_VER == 7
+	// v7
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul(AffineMatrix_32ArgN lhs, AffineMatrix_32ArgN rhs)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		return matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+
+	inline void ACL_SIMD_CALL matrix_mul2(AffineMatrix_32ArgN lhs, AffineMatrix_32ArgN rhs, AffineMatrix_32& output)
+	{
+		const float* ptr = reinterpret_cast<const float*>(&lhs);
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp);
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		output = matrix_set(x_axis, y_axis, z_axis, w_axis);
+	}
+#elif ACL_MATRIX_MUL_VER == 8
+	// v8
+	inline AffineMatrix_32 ACL_SIMD_CALL matrix_mul(AffineMatrix_32Arg0 lhs, AffineMatrix_32ArgN rhs)
+	{
+		Vector4_32 tmp = vector_mul(vector_mix_xxxx(lhs.x_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.x_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.x_axis), rhs.z_axis, tmp);
+		Vector4_32 x_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.y_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.y_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.y_axis), rhs.z_axis, tmp);
+		Vector4_32 y_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.z_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.z_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.z_axis), rhs.z_axis, tmp);
+		Vector4_32 z_axis = tmp;
+
+		tmp = vector_mul(vector_mix_xxxx(lhs.w_axis), rhs.x_axis);
+		tmp = vector_mul_add(vector_mix_yyyy(lhs.w_axis), rhs.y_axis, tmp);
+		tmp = vector_mul_add(vector_mix_zzzz(lhs.w_axis), rhs.z_axis, tmp);
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp);
+		return AffineMatrix_32{ x_axis , y_axis, z_axis, w_axis };
+	}
+
+#define matrix_mul2(lhs, rhs, output) \
+	{ \
+		const float* ptr = reinterpret_cast<const float*>(&lhs); \
+		Vector4_32 tmp = vector_mul(_mm_broadcast_ss(ptr + 0), rhs.x_axis); \
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 1), rhs.y_axis, tmp); \
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 2), rhs.z_axis, tmp); \
+		Vector4_32 x_axis = tmp; \
+\
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 4), rhs.x_axis); \
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 5), rhs.y_axis, tmp); \
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 6), rhs.z_axis, tmp); \
+		Vector4_32 y_axis = tmp; \
+\
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 8), rhs.x_axis); \
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 9), rhs.y_axis, tmp); \
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 10), rhs.z_axis, tmp); \
+		Vector4_32 z_axis = tmp; \
+\
+		tmp = vector_mul(_mm_broadcast_ss(ptr + 12), rhs.x_axis); \
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 13), rhs.y_axis, tmp); \
+		tmp = vector_mul_add(_mm_broadcast_ss(ptr + 14), rhs.z_axis, tmp); \
+		Vector4_32 w_axis = vector_add(rhs.w_axis, tmp); \
+		output = matrix_set(x_axis, y_axis, z_axis, w_axis); \
+	}
+#endif
 
 	inline Vector4_32 ACL_SIMD_CALL matrix_mul_position(AffineMatrix_32Arg0 lhs, Vector4_32Arg4 rhs)
 	{
